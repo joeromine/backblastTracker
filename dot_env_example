@@ -1,0 +1,3 @@
+SLT_DB={"host": "xxxxxxxxxxxxxxxx.amazonaws.com", "user": "xxxxx", "password": "xxxxxxx", "database": "xxxxxx"}
+SLACK_TOKEN="xoxb-xxxxxxxxx-xxxxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxxx"
+MISSING_BB_CHANNEL_ID="ABCDEFGH"
