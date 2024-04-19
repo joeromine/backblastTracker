@@ -20,7 +20,7 @@ const connectionF3DB = mysql.createConnection(JSON.parse(process.env.SLT_DB))
 
 const aoSchedules = []  //ao Info
 let missingBackblasts = [] //missing backblast array
-const days = 15; //How far back to check for missing backblasts
+const days = parseInt(process.env.DAYS_BACK); //How far back to check for missing backblasts
 
 try{
 

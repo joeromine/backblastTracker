@@ -1,3 +1,7 @@
 SLT_DB={"host": "xxxxxxxxxxxxxxxx.amazonaws.com", "user": "xxxxx", "password": "xxxxxxx", "database": "xxxxxx"}
 SLACK_TOKEN="xoxb-xxxxxxxxx-xxxxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxxx"
 MISSING_BB_CHANNEL_ID="ABCDEFGH"
+FTPS={"host": "xxxxxxxxxxxxxxxx.amazonaws.com", "user": "xxxxx", "password": "xxxxxxx", "database": "xxxxxx"}
+REMOTE_PATH="/home/user/folder/" #Remote FTP Path
+IMG_PATH="https://romine.tech/images" #Remote FTP public URL
+DAYS_BACK="20" #How far back to look for missing backblasts
