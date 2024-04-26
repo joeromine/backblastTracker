@@ -1,6 +1,6 @@
 # Backblast Tracker
 
-This application is designed to interface with the F3 database, identifying any missing or incorrectly posted backblasts within the last 30 days. Specifically, it targets backblasts that are overdue by more than 2 days. Once the missing backblasts are pinpointed, the application generates a report which is then shared on a designated Slack channel. This report includes tags for the site Qs associated with the missing backblasts, along with an uploaded image of the report. 
+This application is designed to interface with the F3 database, identifying any missing or incorrectly posted backblasts within the last ## days. Specifically, it targets backblasts that are overdue by more than 2 days. Once the missing backblasts are pinpointed, the application generates a report which is then shared on a designated Slack channel. This report includes tags for the site Qs associated with the missing backblasts, along with an uploaded image of the report. 
 
 ## Getting Started
 
@@ -38,15 +38,31 @@ This application is designed to interface with the F3 database, identifying any 
 
 
 ## HowTo
-- create a .env file using the dot_env_example file as a refernce
+- create a .env file using the below refernce. Also see dot_env_example
 - run npm i in the project folder to install all needed dependencies 
 - run node index.js
 - Check slack for the posted report
 - no report?
     - Check the log
-        - The app should first checks if the file noShowBackBlasts.json does not exist or isnt an array the error "noShowBackBlasts is not an array or doesnt exist" will display
+        - If the file noShowBackBlasts.json does not exist THe app will error "noShowBackBlasts is not an array or doesnt exist"
         - The app should then connect to the f3stlouis database. If the error "An error ocurred performing the beatdowns query." is raised then check the .env file. Its probably an issue with the connection string. Make sure it matches the format in dot_env_example
         
         - The app will next connect to the aos table if the columns schedule, site_q or friendly_name are missing you will see the error 'An error ocurred performing the aos query'.
 
         - If the file noF3Dates.json does not exist or isnt an array the error "noF3Dates is not an array or doesnt exist" will display
+
+
+## Environment variables
+Creating an `.env` file is not necessary. We advise external contributors against it. It can lead to errors when
+variables referenced here get updated since your local `.env` file is ignored.
+
+- `SLT_DB` - MySQL connection string to F3_SLT_DB  {"host": "xxxxxxxxxxxxxxxx.amazonaws.com", "user": "xxxxx", "password": "xxxxxxx", "database": "xxxxxx"}
+- `SLACK_TOKEN` - The Token from Slack "xoxb-xxxxxxxxx-xxxxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxxx"
+- `MISSING_BB_CHANNEL_ID` - Slack Channel_ID for posting the reports
+- `FTPS` - Public FTP for hosting the report image.
+- `REMOTE_PATH` - Path on FTP server for writing the image to 
+- `IMG_PATH` - Remote FTP public URL 
+- `DAYS_BACK` - How far back to look for missing backblasts
+
+
+----
