@@ -23,150 +23,7 @@ let missingBackblasts = [] //missing backblast array
 const days = parseInt(process.env.DAYS_BACK); //How far back to check for missing backblasts
 
 try{
-
-    connectionF3DB.query(`SELECT timestamp, ao_id, bd_date FROM beatdowns WHERE DATE(bd_date) > ADDDATE(CURDATE(), -${days})`, async (err, bds)=> {
-        if(err){
-            console.log("An error ocurred performing the beatdowns query.");
-            return;
-        }
-    
-    
-        //merge list of backblasts from the F3 DB and List of backblasts that didnt occur from the noShow.json file
-        bds = [...bds, ...noShowBackBlasts]
-    
-        connectionF3DB.query("SELECT channel_id, ao, friendly_name, schedule, site_q FROM aos where schedule is not null", async (err, rows)=> {
-            if(err){
-                console.log("An error ocurred performing the aos query.");
-                return;
-            };
-            connectionF3DB.end() //kill db conection
-    
-            //Get Each AO and schedule from aos table
-            rows.forEach(e =>{
-                if(!e.friendly_name){
-                    console.log(`An error ocurred. Friendly name for Slack Chennel ${e.ao} is missing. Please add to aos table`);
-                    return;
-                }
-                //Parse schedule and flatten aos into new array called aoSchedules
-                for (const [key, value] of Object.entries( JSON.parse(e.schedule))) {
-                    aoSchedules.push({channel_id: e.channel_id, name: e.friendly_name, day: key, q: e.site_q })
-                }
-                    
-            })
-    
-    
-            let i = 2; // by default set to 2. This gives PAX 2 days to submit a backblast before going into the blotter
-            while(i < days){
-                            //current run date
-                            var dayToRun = dayjs().subtract(i, 'days')
-                            //Check if date is in noF3Dates. If So skip 
-    
-                            if(!noF3Dates || !noF3Dates?.length){
-                                console.log(`noF3Dates is not an array or doesnt exist`);
-                                return;
-                            }
-    
-                            if(!noF3Dates.includes(dayToRun.toDate().toISOString().substring(0,10))){
-                                aoSchedules.forEach(element => {
-                        
-                                    //Element.day is the day of the week the bd should occure
-                                    //dayToRun checks if today is that day
-                                    //aka is Monday == Monday
-                                    if(element.day == dayToRun.day()){
-                                        //If the days are equal then we should have a bd in the bd array       
-                                        let doesBDExist = false;
-                                        //loop over beatdowns 
-                                        bds.forEach(beatdown =>{
-                                           //If AO match and days match then we have a beatdown and mark true 
-                                           const bdd = dayjs(beatdown.bd_date)
-                                           try{
-                                                //Check if beatdown exists for this day
-                                               if(beatdown.ao_id == element.channel_id && bdd.isSame(dayToRun,'day')){
-                                                   doesBDExist = true;
-                                               }
-                                           }
-                                           catch(e){
-                                               console.log(e);
-                                           }
-                                           
-                                        })
-                                        //At this point if doesBDExist is false then no beatsdown exists for that day and log
-                                        if(!doesBDExist){
-                                            missingBackblasts.push({what: 'Backblast is missing in channel', who: element.name, when: dayToRun.format('dddd, MMM D, YYYY'), q: element.q   })
-                                        }
-                   
-                   
-                                       // if(dayToRun.diff(lastBD, 'day') > 0){
-                                       // console.log(`Backblast is missing in channel ${element.name} for ${dayToRun.format('dddd, MMM D, YYYY')}`);
-                                       //}
-                                   }
-    
-                                })
-                            }
-                            i++
-                        }//End While
-                        
-                        if(missingBackblasts.length == 0){
-                            console.log('No missing backblasts today');
-                            return true
-                        }
-                        //sort
-                        missingBackblasts = missingBackblasts.sort((m, f)=> m.who.localeCompare(f.who));
-    
-                      // max number of missing backblasts for an ao; will will need this to know the number of col in the report
-                        var maxLength = 1;
-                        var htmlBuilderObj = {}
-                        var count = 0
-                        let listOfSiteQs = '';
-                        missingBackblasts.forEach(e =>{
-                            count++
-                            if(htmlBuilderObj[e.who]){
-                                htmlBuilderObj[e.who].push(e.when)
-                            } else{
-                                htmlBuilderObj[e.who] = [e.when]
-                            }
-                            console.log(`${e.what} ${e.who} ${e.when} `)
-                            listOfSiteQs = (listOfSiteQs.indexOf(e.q)== -1) ? listOfSiteQs + `<@${e.q}> ` : listOfSiteQs;
-                        })
-    
-                        for (let x of Object.keys(htmlBuilderObj)){
-                            if (htmlBuilderObj[x].length > maxLength) maxLength = htmlBuilderObj[x].length
-                        }
-    
-                       if(await putIntoFile(htmlBuilderObj, maxLength, count)){
-                        console.log('next');           
-                        
-                        
-                        
-                        //send msg to slack
-                        axios.post('https://slack.com/api/chat.postMessage',
-                                {
-                                    'channel': process.env.MISSING_BB_CHANNEL_ID,
-                                    'text': ` ${listOfSiteQs} a backblast is missing your site's channel.`,
-                                    'link_names':'1',
-                                    'attachments': `[{"title": "missing backblast", "image_url": "${process.env.IMG_PATH}/${fn}"}]`
-                                },
-                                {
-                                    headers: {
-                                        'Authorization': `Bearer ${process.env.SLACK_TOKEN}`,
-                                        'Content-type': 'application/json'
-                                    }
-                                }
-                            ).then(x=>{
-                                console.log('Message Sent to slack');
-                                process.exit()
-
-                            }).catch(d=>{
-                                console.log('Error adding Message to slack');
-                            })
-    
-                       }else{
-                        console.log('error');
-                       };
-    
-        })
-    
-    })
+    run()
 }
 catch (e){
     console.log(e)
@@ -252,3 +109,152 @@ async function ftpToPublic(){
 
 
 }
+
+
+
+async function run(){
+    connectionF3DB.query(`SELECT timestamp, ao_id, bd_date FROM beatdowns WHERE DATE(bd_date) > ADDDATE(CURDATE(), -${days})`, async (err, bds)=> {
+        if(err){
+            console.log("An error ocurred performing the beatdowns query.");
+            return;
+        }
+    
+    
+        //merge list of backblasts from the F3 DB and List of backblasts that didnt occur from the noShow.json file
+        bds = [...bds, ...noShowBackBlasts]
+    
+        connectionF3DB.query("SELECT channel_id, ao, friendly_name, schedule, site_q FROM aos where schedule is not null", async (err, rows)=> {
+            if(err){
+                console.log("An error ocurred performing the aos query.");
+                return;
+            };
+            connectionF3DB.end() //kill db conection
+    
+            //Get Each AO and schedule from aos table
+            rows.forEach(async e =>{
+                if(!e.friendly_name){
+                    console.log(`An error ocurred. Friendly name for Slack Chennel ${e.ao} is missing. Please add to aos table`);
+                    return;
+                }
+                //Parse schedule and flatten aos into new array called aoSchedules
+                for (const [key, value] of Object.entries( JSON.parse(e.schedule))) {
+                    aoSchedules.push({channel_id: e.channel_id, name: e.friendly_name, day: key, q: e.site_q })
+                }
+                    
+            })
+    
+    
+            let i = 2; // by default set to 2. This gives PAX 2 days to submit a backblast before going into the blotter
+            while(i < days){
+                            //current run date
+                            var dayToRun = dayjs().subtract(i, 'days')
+                            //Check if date is in noF3Dates. If So skip 
+    
+                            if(!noF3Dates || !noF3Dates?.length){
+                                console.log(`noF3Dates is not an array or doesnt exist`);
+                                return;
+                            }
+    
+                            if(!noF3Dates.includes(dayToRun.toDate().toISOString().substring(0,10))){
+                                aoSchedules.forEach(async element => {
+                        
+                                    //Element.day is the day of the week the bd should occure
+                                    //dayToRun checks if today is that day
+                                    //aka is Monday == Monday
+                                    if(element.day == dayToRun.day()){
+                                        //If the days are equal then we should have a bd in the bd array       
+                                        let doesBDExist = false;
+                                        //loop over beatdowns 
+                                        bds.forEach(beatdown =>{
+                                           //If AO match and days match then we have a beatdown and mark true 
+                                           const bdd = dayjs(beatdown.bd_date)
+                                           try{
+                                                //Check if beatdown exists for this day
+                                               if(beatdown.ao_id == element.channel_id && bdd.isSame(dayToRun,'day')){
+                                                   doesBDExist = true;
+                                               }
+                                           }
+                                           catch(e){
+                                               console.log(e);
+                                           }
+                                           
+                                        })
+                                        //At this point if doesBDExist is false then no beatsdown exists for that day and log
+                                        if(!doesBDExist){
+                                            missingBackblasts.push({what: 'Backblast is missing in channel', who: element.name, when: dayToRun.format('dddd, MMM D, YYYY'), q: element.q   })
+                                        }
+                   
+                   
+                                       // if(dayToRun.diff(lastBD, 'day') > 0){
+                                       // console.log(`Backblast is missing in channel ${element.name} for ${dayToRun.format('dddd, MMM D, YYYY')}`);
+                                       //}
+                                   }
+    
+                                })
+                            }
+                            i++
+            }//End While
+                        
+                        if(missingBackblasts.length == 0){
+                            console.log('No missing backblasts today');
+                            return true
+                        }
+                        //sort
+                        missingBackblasts = missingBackblasts.sort((m, f)=> m.who.localeCompare(f.who));
+    
+                      // max number of missing backblasts for an ao; will will need this to know the number of col in the report
+                        var maxLength = 1;
+                        var htmlBuilderObj = {}
+                        var count = 0
+                        let listOfSiteQs = '';
+                        missingBackblasts.forEach(async e =>{
+                            count++
+                            if(htmlBuilderObj[e.who]){
+                                htmlBuilderObj[e.who].push(e.when)
+                            } else{
+                                htmlBuilderObj[e.who] = [e.when]
+                            }
+                            console.log(`${e.what} ${e.who} ${e.when} `)
+                            listOfSiteQs = (listOfSiteQs.indexOf(e.q)== -1) ? listOfSiteQs + `<@${e.q}> ` : listOfSiteQs;
+                        })
+    
+                        for (let x of Object.keys(htmlBuilderObj)){
+                            if (htmlBuilderObj[x].length > maxLength) maxLength = htmlBuilderObj[x].length
+                        }
+    
+                       if(await putIntoFile(htmlBuilderObj, maxLength, count)){
+                        console.log('next');           
+                        
+                        
+                        
+                        //send msg to slack
+                        try{
+                            process.exit()
+                            return true;
+                            const p = await  axios.post('https://slack.com/api/chat.postMessage',
+                                {
+                                    'channel': process.env.MISSING_BB_CHANNEL_ID,
+                                    'text': ` ${listOfSiteQs} a backblast is missing your site's channel.`,
+                                    'link_names':'1',
+                                    'attachments': `[{"title": "missing backblast", "image_url": "${process.env.IMG_PATH}/${fn}"}]`
+                                },
+                                {
+                                    headers: {
+                                        'Authorization': `Bearer ${process.env.SLACK_TOKEN}`,
+                                        'Content-type': 'application/json'
+                                    }
+                                }
+                            )
+                            console.log('Message Sent to slack');
+                            return
+                        }
+                        catch(e){
+                            console.log('error posting to slack');
+                            return
+
+                        }
+                    }
+                })
+    })
+}
+
