@@ -229,8 +229,6 @@ async function run(){
                         
                         //send msg to slack
                         try{
-                            process.exit()
-                            return true;
                             const p = await  axios.post('https://slack.com/api/chat.postMessage',
                                 {
                                     'channel': process.env.MISSING_BB_CHANNEL_ID,
