@@ -1,17 +1,19 @@
 const axios = require('axios');
 const nodeHtmlToImage = require('node-html-to-image')
 const mysql = require('mysql');
+const util = require('util');
 let Client = require('ssh2-sftp-client');
 const dayjs = require('dayjs')
 require('dotenv').config()
-
+const test = false;
 let d = new Date()
 
 const fn = `${d.toLocaleDateString("sv-SE")}.png`
 // json file containing an array of bacblasts that didnt happen
 //example {"bd_date":"2023-08-24", "ao_id": "C04GNPHPBH8", "timestamp": 11}
 const noShowBackBlasts = require('./noShow.json')
-const noF3Dates = require('./noF3Dates.json') //Lightning, Convergence . . . 
+const noF3Dates = require('./noF3Dates.json'); //Lightning, Convergence . . . 
+const { log } = require('console');
 if(!noShowBackBlasts || !noShowBackBlasts?.length){
     console.log(`noShowBackBlasts is not an array or doesnt exist`);
     return;
@@ -21,9 +23,11 @@ const connectionF3DB = mysql.createConnection(JSON.parse(process.env.SLT_DB))
 const aoSchedules = []  //ao Info
 let missingBackblasts = [] //missing backblast array
 const days = parseInt(process.env.DAYS_BACK); //How far back to check for missing backblasts
+//const days = d.getDate() + 1
 
 try{
-    run()
+    run()    
+    
 }
 catch (e){
     console.log(e)
@@ -113,6 +117,10 @@ async function ftpToPublic(){
 
 
 async function run(){
+    // if(test){
+    //     await getEC()
+    //     return;
+    // }
     connectionF3DB.query(`SELECT timestamp, ao_id, bd_date FROM beatdowns WHERE DATE(bd_date) > ADDDATE(CURDATE(), -${days})`, async (err, bds)=> {
         if(err){
             console.log("An error ocurred performing the beatdowns query.");
@@ -128,7 +136,7 @@ async function run(){
                 console.log("An error ocurred performing the aos query.");
                 return;
             };
-            connectionF3DB.end() //kill db conection
+            
     
             //Get Each AO and schedule from aos table
             rows.forEach(async e =>{
@@ -244,7 +252,8 @@ async function run(){
                                 }
                             )
                             console.log('Message Sent to slack');
-                            return
+                            console.log('Run EC');
+                            getEC()
                         }
                         catch(e){
                             console.log('error posting to slack');
@@ -256,3 +265,82 @@ async function run(){
     })
 }
 
+async function getEC(){
+    try{
+        const p = await  axios.post('https://slack.com/api/conversations.history',
+            {
+                'channel': 'C03B80NPN9F',
+            },
+            {
+                headers: {
+                    'Authorization': `Bearer ${process.env.SLACK_TOKEN}`,
+                    'Content-type': 'application/json'
+                }
+            }
+        )
+        let paxData= {}
+        p.data.messages.map(m =>{
+            const dd = m.text.split('\n')
+             var date = dd.filter(d => d.indexOf('*DATE*') > -1 )
+             var pax = dd.filter(d => d.indexOf('*PAX*') > -1 )
+             if(date?.length == 1 && pax?.length == 1){
+              date =  (date[0].substring(date[0].indexOf(':') + 1)).trim()
+              pax =  (pax[0].substring(pax[0].indexOf(':') + 1)).trim().replaceAll(">","").replaceAll("<@","").split(' ')
+              
+              if(paxData[date]){
+                paxData[date] = [...paxData[date], ...pax]
+              }
+              else{
+                paxData[date] = pax
+              }
+             }
+        })
+        connectionF3DB.query("SELECT date, user_id FROM bd_attendance where user_id != 'U03BWNYJQ3S' and q_user_id = 'U03BWNYJQ3S' and ao_id = 'C03B80NPN9F' and DATE(date) > ADDDATE(CURDATE(), -60)", async (err, rows)=> {
+            if(err){
+                console.log("An error ocurred performing the aos query.");
+                return;
+            };
+
+            rows.forEach(async e =>{
+                if(paxData[e.date]?.length > 0){
+                    paxData[e.date] = paxData[e.date].filter(r => r != e?.user_id)
+                    if(paxData[e.date].length == 0){
+                        delete paxData[e.date]
+                    }
+                }
+                
+            })
+            console.log(paxData);
+            var ot = '' 
+             for(let i in paxData){
+                paxData[i] = paxData[i].map(m=>{
+                        return `('${m}' ,'C03B80NPN9F', '${i}','U03BWNYJQ3S')`       
+                    return m
+                 })
+                 paxData[i] = paxData[i].join(',')
+                }
+                 console.log(paxData);
+                 paxData = Object.values(paxData)
+                 console.log(paxData);
+                 paxData = paxData.join(',')
+                 console.log(paxData);
+                 if(paxData && paxData.length > 10){
+                    let sql = `INSERT INTO bd_attendance (user_id, ao_id, date, q_user_id) VALUES ${paxData}`
+                    connectionF3DB.query(sql,async (err, rows)=>{
+                       if(err){
+                           console.log("An error ocurred performing the aos query.");
+                           return;
+                       };
+                       console.log(`bd_attendance row inserted`);
+   
+                       })
+                 }
+    })
+
+    }
+    catch(e){
+        console.log('error posting to slack');
+        return
+
+    }
+}
